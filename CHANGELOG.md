@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- Show track progress in the collapsed notch: a thin line under the media line, or a ring around the artwork beside the camera.
+
 ## [1.3.0] - 2026-09-30
 
 - Add a setting to show the notch on every connected display.

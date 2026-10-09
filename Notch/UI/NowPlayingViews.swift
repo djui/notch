@@ -44,6 +44,21 @@ struct NowPlayingStageView: View {
             // Beside the camera: artwork on the left, the equalizer on the right, like iPhone.
             HStack(spacing: 6) {
                 NowPlayingArtworkView(size: 15, showsAppBadge: false)
+                    .overlay {
+                        // No room for a line beside the camera; ring the artwork instead.
+                        if item.hasProgress {
+                            CompactProgress(item: item) { fraction in
+                                ProgressOutline(cornerRadius: 15 * 0.18 + 3)
+                                    .trim(from: 0, to: fraction)
+                                    .stroke(Color.white.opacity(0.85), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                                    .background(
+                                        ProgressOutline(cornerRadius: 15 * 0.18 + 3)
+                                            .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
+                                    )
+                                    .padding(-3)
+                            }
+                        }
+                    }
                 Spacer(minLength: centerGap)
                 if item.isPlaying {
                     EqualizerView(isPlaying: true, height: 11)
@@ -78,6 +93,24 @@ struct NowPlayingStageView: View {
         }
         .padding(.horizontal, compactInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottom) {
+            if item.hasProgress {
+                CompactProgress(item: item) { fraction in
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.2))
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.85))
+                                .frame(width: max(2, geo.size.width * fraction))
+                        }
+                    }
+                    .frame(height: 2)
+                    .padding(.horizontal, compactInset)
+                    .padding(.bottom, 3)
+                }
+            }
+        }
         .allowsHitTesting(false)
     }
 
@@ -130,7 +163,7 @@ struct NowPlayingStageView: View {
                 }
             }
 
-            if item.duration > 1 {
+            if item.hasProgress {
                 progress(item)
             }
 
@@ -170,7 +203,7 @@ struct NowPlayingStageView: View {
     private func progressBar(_ item: NowPlayingItem, at date: Date) -> some View {
         let elapsed = item.currentElapsed(at: date)
         let remaining = item.currentRemaining(at: date)
-        let fraction = item.duration > 0 ? min(1, max(0, elapsed / item.duration)) : 0
+        let fraction = item.fraction(at: date)
         return VStack(spacing: 5) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -208,6 +241,43 @@ struct NowPlayingStageView: View {
             return String(format: "%d:%02d:%02d", hours, minutes, secs)
         }
         return String(format: "%d:%02d", minutes, secs)
+    }
+}
+
+/// Redraws the collapsed progress once a second while playing; holds still when paused.
+private struct CompactProgress<Content: View>: View {
+    let item: NowPlayingItem
+    @ViewBuilder var content: (CGFloat) -> Content
+
+    var body: some View {
+        if item.isPlaying {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                content(CGFloat(item.fraction(at: context.date)))
+            }
+        } else {
+            content(CGFloat(item.fraction(at: item.positionDate)))
+        }
+    }
+}
+
+/// A rounded rectangle traced clockwise from the top center, so a trim reads like a clock.
+private struct ProgressOutline: Shape {
+    var cornerRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let radius = min(cornerRadius, rect.width / 2, rect.height / 2)
+        let topLeft = CGPoint(x: rect.minX, y: rect.minY)
+        let topRight = CGPoint(x: rect.maxX, y: rect.minY)
+        let bottomRight = CGPoint(x: rect.maxX, y: rect.maxY)
+        let bottomLeft = CGPoint(x: rect.minX, y: rect.maxY)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addArc(tangent1End: topRight, tangent2End: bottomRight, radius: radius)
+        path.addArc(tangent1End: bottomRight, tangent2End: bottomLeft, radius: radius)
+        path.addArc(tangent1End: bottomLeft, tangent2End: topLeft, radius: radius)
+        path.addArc(tangent1End: topLeft, tangent2End: topRight, radius: radius)
+        path.closeSubpath()
+        return path
     }
 }
 
