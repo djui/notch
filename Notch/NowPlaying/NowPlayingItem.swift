@@ -39,6 +39,17 @@ struct NowPlayingItem: Equatable, Sendable {
         return min(duration, max(0, position))
     }
 
+    /// Played share of the track, 0...1. Zero when there is no duration.
+    func fraction(at date: Date = .now) -> Double {
+        guard duration > 0 else { return 0 }
+        return min(1, max(0, currentElapsed(at: date) / duration))
+    }
+
+    /// Live streams and some web players report no length; they get no progress.
+    var hasProgress: Bool {
+        duration > 1
+    }
+
     func currentRemaining(at date: Date = .now) -> TimeInterval {
         guard duration > 0 else { return 0 }
         return max(0, duration - currentElapsed(at: date))
