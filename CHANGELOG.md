@@ -6,7 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-21
+
 - Fix Notch hanging at high CPU after waking from sleep: audio and camera listeners were never removed, so each change of audio devices doubled them.
+
 
 ## [1.4.0] - 2026-10-09
 
@@ -109,7 +112,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Expand and collapse stay anchored to the top center
 - Reopen a hidden or windowless player when clicking the Now Playing title
 
-[Unreleased]: https://github.com/djui/notch/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/djui/notch/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/djui/notch/releases/tag/v1.4.1
 [1.4.0]: https://github.com/djui/notch/releases/tag/v1.4.0
 [1.3.0]: https://github.com/djui/notch/releases/tag/v1.3.0
 [1.2.0]: https://github.com/djui/notch/releases/tag/v1.2.0
