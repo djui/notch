@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- Fix Notch hanging at high CPU after waking from sleep: audio and camera listeners were never removed, so each change of audio devices doubled them.
+
 ## [1.4.0] - 2026-10-09
 
 - Show track progress in the collapsed notch: a thin line under the media line, or a ring around the artwork beside the camera.
