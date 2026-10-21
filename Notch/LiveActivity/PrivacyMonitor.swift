@@ -10,37 +10,34 @@ final class PrivacyMonitor {
     private(set) var cameraInUse = false
     var onChange: ((_ microphone: Bool, _ camera: Bool) -> Void)?
 
+    private var deviceListListener: AudioListener?
     private var audioListeners: [AudioListener] = []
     private var cameraListeners: [CameraListener] = []
 
     func start() {
         stop()
+        deviceListListener = AudioListener(
+            object: AudioObjectID(kAudioObjectSystemObject),
+            address: AudioDevices.address(kAudioHardwarePropertyDevices)
+        ) { [weak self] in
+            self?.rebuildListeners()
+            self?.refresh()
+        }
         rebuildListeners()
         microphoneInUse = Self.readMicrophone()
         cameraInUse = Self.readCamera()
     }
 
     func stop() {
+        deviceListListener = nil
         audioListeners.removeAll()
         cameraListeners.removeAll()
     }
 
     private func rebuildListeners() {
-        audioListeners.removeAll()
-        let system = AudioObjectID(kAudioObjectSystemObject)
-        if let devices = AudioListener(object: system, address: AudioDevices.address(kAudioHardwarePropertyDevices), handler: { [weak self] in
-            self?.rebuildListeners()
-            self?.refresh()
-        }) {
-            audioListeners.append(devices)
-        }
-        for device in AudioDevices.all where AudioDevices.hasInput(device) {
-            if let listener = AudioListener(
-                object: device,
-                address: AudioDevices.address(kAudioDevicePropertyDeviceIsRunningSomewhere),
-                handler: { [weak self] in self?.refresh() }
-            ) {
-                audioListeners.append(listener)
+        audioListeners = AudioDevices.all.filter(AudioDevices.hasInput).compactMap { device in
+            AudioListener(object: device, address: AudioDevices.address(kAudioDevicePropertyDeviceIsRunningSomewhere)) { [weak self] in
+                self?.refresh()
             }
         }
         cameraListeners = Self.cameraDevices().compactMap { device in
@@ -99,15 +96,21 @@ private final class CameraListener {
 
     private let device: CMIOObjectID
     private var address = CameraListener.runningAddress
-    private let block: CMIOObjectPropertyListenerBlock
+    private let token: ListenerToken
 
+    /// Function-pointer API for the same reason as `AudioListener`.
     init?(device: CMIOObjectID, handler: @escaping () -> Void) {
         self.device = device
-        block = { _, _ in handler() }
-        guard CMIOObjectAddPropertyListenerBlock(device, &address, .main, block) == 0 else { return nil }
+        token = ListenerToken(handler)
+        guard CMIOObjectAddPropertyListener(device, &address, cameraPropertyChanged, token.clientData) == 0 else { return nil }
     }
 
     deinit {
-        CMIOObjectRemovePropertyListenerBlock(device, &address, .main, block)
+        CMIOObjectRemovePropertyListener(device, &address, cameraPropertyChanged, token.clientData)
     }
+}
+
+private let cameraPropertyChanged: CMIOObjectPropertyListenerProc = { _, _, _, clientData in
+    ListenerToken.fire(clientData)
+    return 0
 }

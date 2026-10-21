@@ -76,20 +76,66 @@ enum AudioDevices {
     }
 }
 
-/// A CoreAudio property listener that removes itself.
+/// A CoreAudio property listener that removes itself. The handler runs on the main queue.
+///
+/// Uses the function-pointer API: Swift bridges a closure to a new block on every call, so the
+/// block API's remove never matches its add and the listener keeps firing after it is released.
 final class AudioListener {
     private let object: AudioObjectID
     private var address: AudioObjectPropertyAddress
-    private let block: AudioObjectPropertyListenerBlock
+    private let token: ListenerToken
 
     init?(object: AudioObjectID, address: AudioObjectPropertyAddress, handler: @escaping () -> Void) {
         self.object = object
         self.address = address
-        block = { _, _ in handler() }
-        guard AudioObjectAddPropertyListenerBlock(object, &self.address, .main, block) == noErr else { return nil }
+        token = ListenerToken(handler)
+        guard AudioObjectAddPropertyListener(object, &self.address, audioPropertyChanged, token.clientData) == noErr else {
+            return nil
+        }
     }
 
     deinit {
-        AudioObjectRemovePropertyListenerBlock(object, &address, .main, block)
+        AudioObjectRemovePropertyListener(object, &address, audioPropertyChanged, token.clientData)
+    }
+}
+
+private let audioPropertyChanged: AudioObjectPropertyListenerProc = { _, _, _, clientData in
+    ListenerToken.fire(clientData)
+    return noErr
+}
+
+/// Carries a listener's handler to the main queue. Callbacks arrive on a framework thread with
+/// only this token's number as client data and look the handler up on the main queue, so one
+/// that races a removal finds nothing instead of a freed object.
+final class ListenerToken {
+    private static let lock = NSLock()
+    private static var handlers: [UInt: () -> Void] = [:]
+    private static var lastID: UInt = 0
+
+    let clientData: UnsafeMutableRawPointer
+
+    init(_ handler: @escaping () -> Void) {
+        Self.lock.lock()
+        Self.lastID += 1
+        let id = Self.lastID
+        Self.handlers[id] = handler
+        Self.lock.unlock()
+        clientData = UnsafeMutableRawPointer(bitPattern: id)!
+    }
+
+    deinit {
+        Self.lock.lock()
+        Self.handlers[UInt(bitPattern: clientData)] = nil
+        Self.lock.unlock()
+    }
+
+    static func fire(_ clientData: UnsafeMutableRawPointer?) {
+        let id = UInt(bitPattern: clientData)
+        DispatchQueue.main.async {
+            lock.lock()
+            let handler = handlers[id]
+            lock.unlock()
+            handler?()
+        }
     }
 }
